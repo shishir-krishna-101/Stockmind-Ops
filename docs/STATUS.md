@@ -23,8 +23,20 @@
 ## CI (Continuous Integration)
 - **Jenkins**: PLANNED (EC2 foundation exists, pipeline pending)
 - **SonarQube**: PLANNED
-- **Trivy**: PLANNED
-- **Cosign**: PLANNED
+
+### SAST (Static Application Security Testing) — PLANNED
+All four SAST tools run in the Jenkins pipeline **before Docker build**. See [ADR-014](14-decisions/ADR-014-SAST.md) and [SAST Guide](10-security/SAST.md).
+- **Bandit**: PLANNED — Python backend SAST (injection, crypto, hardcoded secrets)
+- **npm audit**: PLANNED — React frontend dependency CVE scanning (native npm)
+- **OWASP Dependency-Check**: PLANNED — Multi-ecosystem dependency scanning against NVD
+- **Checkov**: PLANNED — Terraform IaC security misconfiguration scanning
+
+### Image Security — PLANNED
+- **Trivy**: PLANNED — Container image scanning (runs after Docker build)
+- **Cosign**: PLANNED — Image signing and verification
+
+### DAST (Dynamic Application Security Testing) — DEFERRED
+- **OWASP ZAP**: DEFERRED — Requires stable test environment (Phase 7+). Tool selected, implementation deferred. See [SAST Guide](10-security/SAST.md) for reasoning.
 
 ## Configuration Management
 - **Ansible**: PLANNED — manages ongoing mutable configuration of the Jenkins EC2 server (plugin setup, tool upgrades, service tuning, hardening). Complements Terraform (which provisions the instance) and Argo CD (which manages Kubernetes). See [ADR-013](14-decisions/ADR-013-Ansible.md).

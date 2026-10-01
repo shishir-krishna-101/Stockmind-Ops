@@ -13,6 +13,7 @@
 11. [ADR-011: Istio Service Mesh](ADR-011-Istio.md)
 12. [ADR-012: AI Incident Engine](ADR-012-AI-Incident-Engine.md)
 13. [ADR-013: Ansible for Configuration Management](ADR-013-Ansible.md)
+14. [ADR-014: SAST for Application Security Testing](ADR-014-SAST.md)
 
 ## Historical Decisions
 - [HIST-001: Redis Removal](HIST-001-Redis-Removal.md)

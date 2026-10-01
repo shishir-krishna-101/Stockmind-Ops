@@ -840,117 +840,15 @@ In your GitHub **application repository** (`StockMind`) settings:
 
 ### Jenkinsfile
 
-Create a `Jenkinsfile` at the root of the **application repository**:
+Create a `Jenkinsfile` at the root of the **application repository**. 
 
-```groovy
-pipeline {
-    agent any
-
-    environment {
-        AWS_REGION   = 'ap-south-1'
-        ECR_REGISTRY = '<account-id>.dkr.ecr.ap-south-1.amazonaws.com'
-        IMAGE_TAG    = "${env.BUILD_NUMBER}"
-    }
-
-    stages {
-        stage('Checkout') {
-            steps { checkout scm }
-        }
-
-        stage('Backend Tests') {
-            steps {
-                sh 'docker compose run --rm backend pytest'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'sonar-scanner -Dsonar.projectKey=stockmind-backend -Dsonar.sources=backend/'
-                }
-            }
-        }
-
-        stage('Docker Build') {
-            parallel {
-                stage('Build Frontend') {
-                    steps {
-                        sh "docker build -t stockmind-frontend:${IMAGE_TAG} ./frontend"
-                    }
-                }
-                stage('Build Backend') {
-                    steps {
-                        sh "docker build -t stockmind-backend:${IMAGE_TAG} ./backend"
-                    }
-                }
-            }
-        }
-
-        stage('Trivy Scan') {
-            parallel {
-                stage('Scan Frontend') {
-                    steps {
-                        sh "trivy image --exit-code 1 --severity CRITICAL stockmind-frontend:${IMAGE_TAG}"
-                    }
-                }
-                stage('Scan Backend') {
-                    steps {
-                        sh "trivy image --exit-code 1 --severity CRITICAL stockmind-backend:${IMAGE_TAG}"
-                    }
-                }
-            }
-        }
-
-        stage('Sign and Push to ECR') {
-            steps {
-                sh """
-                  aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-                  docker tag stockmind-frontend:${IMAGE_TAG} ${ECR_REGISTRY}/stockmind-frontend:${IMAGE_TAG}
-                  docker push ${ECR_REGISTRY}/stockmind-frontend:${IMAGE_TAG}
-                  cosign sign ${ECR_REGISTRY}/stockmind-frontend:${IMAGE_TAG}
-
-                  docker tag stockmind-backend:${IMAGE_TAG} ${ECR_REGISTRY}/stockmind-backend:${IMAGE_TAG}
-                  docker push ${ECR_REGISTRY}/stockmind-backend:${IMAGE_TAG}
-                  cosign sign ${ECR_REGISTRY}/stockmind-backend:${IMAGE_TAG}
-                """
-            }
-        }
-
-        stage('Update GitOps Repository') {
-            steps {
-                sh """
-                  git clone https://github.com/shishir-krishna-101/Stockmind-Ops.git gitops
-                  sed -i 's|stockmind-frontend:.*|stockmind-frontend:${IMAGE_TAG}|g' \
-                    gitops/k8s/frontend/deployment.yaml
-                  sed -i 's|stockmind-backend:.*|stockmind-backend:${IMAGE_TAG}|g' \
-                    gitops/k8s/backend/deployment.yaml
-                  cd gitops
-                  git config user.email "ci@stockmind"
-                  git config user.name "Jenkins CI"
-                  git commit -am "ci: bump image tags to build ${IMAGE_TAG}"
-                  git push
-                """
-            }
-        }
-    }
-
-    post {
-        failure {
-            echo 'Build failed. Investigate Jenkins logs.'
-        }
-        success {
-            echo 'Build succeeded. Argo CD will sync shortly.'
-        }
-    }
-}
-```
+> **Important:** The pipeline includes robust SAST (Static Application Security Testing) and Image Scanning. For the complete, production-ready `Jenkinsfile` code and an explanation of all security tools used, please see:
+> **[CI/CD Documentation & Full Jenkinsfile](../07-cicd/README.md)**
 
 ### Evidence of completion
 
 - Pushing to the application repo triggers a Jenkins build automatically.
-- All stages turn green in the Jenkins UI.
+- All stages (including tests, SAST, SonarQube, Build, Scan, Sign, Push) turn green in the Jenkins UI.
 - New images appear in ECR tagged with the build number.
 - The GitOps repo receives a commit with updated image tags.
 
@@ -959,19 +857,19 @@ pipeline {
 ## Phase 6 — Security Scanning and Image Signing
 
 **Status: PLANNED**
-**Note:** Trivy and Cosign are already installed on the Jenkins EC2 by `install-ci.sh`. This phase ensures they are correctly integrated.
+**Note:** SAST (Bandit, npm audit, Checkov, OWASP Dependency-Check), Trivy, and Cosign are integrated into the pipeline.
 
-### Trivy configuration
+### SAST Configuration
+- See the [SAST Guide](../10-security/SAST.md) for configuring Bandit, npm audit, Checkov, and OWASP Dependency-Check.
+
+### Trivy Image Scanning
 
 ```bash
-# Scan filesystem (catches dependency vulnerabilities before Docker build)
-trivy fs --exit-code 1 --severity CRITICAL ./backend
-
 # Scan built image (catches OS-layer vulnerabilities)
 trivy image --exit-code 1 --severity CRITICAL stockmind-backend:latest
 ```
 
-Fail the build on CRITICAL severity. Use a `.trivyignore` file to document accepted exceptions with justification.
+Fail the build on CRITICAL severity. Use a `.trivyignore` file to document accepted exceptions with justification. Note that filesystem dependency scanning is handled earlier by OWASP Dependency-Check.
 
 ### Cosign key management
 
