@@ -15,3 +15,16 @@ The project enforces a strict separation of concerns:
 - **DevOps Repository** (`Stockmind-Ops`): Contains the Terraform AWS infrastructure, Argo CD bootstrapping, CI configuration, and this documentation.
 
 This separation ensures that developers focus on application logic while platform engineers manage infrastructure state without cross-contamination of secrets or concerns.
+
+---
+
+## 4. Where to Start
+
+For a complete step-by-step guide covering all phases from prerequisites to the AI Incident Engine, see the **[Complete Setup Guide](SETUP_GUIDE.md)**.
+
+The setup guide covers:
+- **Phase 1 & 2:** Terraform CI/CD Foundation — `IMPLEMENTED, start here`
+- **Phase 3–6:** Containerization, first EKS deployment, Jenkins CI, security scanning
+- **Phase 7:** Argo CD GitOps
+- **Phase 8–10:** Observability, autoscaling, security hardening
+- **Phase 11–13:** AI Incident Engine, controlled remediation, cost optimization
