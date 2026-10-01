@@ -14,6 +14,7 @@ StockMind turns raw inventory and sales data into actionable business insights, 
 ## Technology Overview
 - **Application:** React (Frontend), Python/FastAPI (Backend), PostgreSQL (Database), Google Gemini API (AI - Planned).
 - **Infrastructure:** AWS (EKS, EC2, ECR, RDS, VPC), Terraform (IaC).
+- **Configuration Management (Planned):** Ansible — manages ongoing mutable configuration of the Jenkins EC2 CI server (plugins, tool upgrades, hardening). Complements Terraform, which handles immutable provisioning.
 - **CI/CD (Planned):** Jenkins, SonarQube, Trivy, Cosign, Argo CD (GitOps).
 - **Observability (Planned):** Prometheus, Grafana, Fluent Bit, Loki, OpenTelemetry, Tempo, Alertmanager.
 

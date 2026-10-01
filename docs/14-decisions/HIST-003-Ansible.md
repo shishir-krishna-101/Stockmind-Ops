@@ -1,24 +1,22 @@
-# ADR-HIST-003: Ansible Not Core
+# HIST-003: Ansible as Core Deployment Mechanism — Superseded
 
-**Status:** Historical/Removed
+**Status:** Superseded by [ADR-013: Ansible for Configuration Management](ADR-013-Ansible.md)
 
-## Context
-Considered Ansible for configuration management.
+---
 
-## Decision
-Use Terraform and GitOps (Argo CD) instead.
+## Historical Context
 
-## Alternatives Considered
-Use Ansible for EC2 and K8s deployments.
+Ansible was previously considered as a general-purpose mechanism to handle both EC2 setup and Kubernetes deployments as part of the early StockMind architecture exploration.
 
-## Reasoning
-Terraform handles immutable infrastructure better, and GitOps is superior for K8s.
+That approach — using Ansible as the primary deployment mechanism for application workloads — was **removed** because:
 
-## Trade-offs
-Less flexibility for OS-level mutability.
+- Terraform handles AWS infrastructure provisioning better (declarative, stateful, drifts detectable).
+- Argo CD (GitOps) is superior for Kubernetes workload deployment (pull-based, self-healing, UI visibility).
+- Using Ansible for K8s deployments introduces push-based deployments without a clear desired-state reconciliation loop.
 
-## Consequences
-Infrastructure must be immutable.
+## Current Status
 
-## Future Reconsideration Triggers
-Reconsider if we need to manage many bare-metal or non-K8s EC2 instances.
+Ansible has been **re-introduced in a narrower, correct scope**: managing the ongoing mutable configuration of the Jenkins EC2 CI server — the layer that Terraform (immutable provisioning) and Argo CD (K8s layer) do not cover.
+
+See **[ADR-013: Ansible for Configuration Management](ADR-013-Ansible.md)** for the current decision.
+

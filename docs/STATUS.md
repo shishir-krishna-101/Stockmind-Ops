@@ -26,6 +26,9 @@
 - **Trivy**: PLANNED
 - **Cosign**: PLANNED
 
+## Configuration Management
+- **Ansible**: PLANNED — manages ongoing mutable configuration of the Jenkins EC2 server (plugin setup, tool upgrades, service tuning, hardening). Complements Terraform (which provisions the instance) and Argo CD (which manages Kubernetes). See [ADR-013](14-decisions/ADR-013-Ansible.md).
+
 ## CD (Continuous Deployment)
 - **Argo CD**: PARTIALLY IMPLEMENTED (Bootstrap installed via Terraform, GitOps apps pending)
 
@@ -46,5 +49,5 @@
 ## Historical/Removed
 - **Redis**: HISTORICAL/REMOVED (Not being used, removed to simplify architecture)
 - **Karpenter**: HISTORICAL/REMOVED (Replaced with managed node groups for current scale)
-- **Ansible core approach**: HISTORICAL/REMOVED (Using Terraform and GitOps instead)
+- **Ansible as core K8s/app deployment mechanism**: HISTORICAL/REMOVED — Ansible was previously considered as a replacement for GitOps deployments. That use-case is removed. Ansible is now re-introduced specifically and only for EC2 configuration management.
 - **Route 53 core requirement**: HISTORICAL/REMOVED

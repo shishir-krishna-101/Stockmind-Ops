@@ -10,6 +10,21 @@
 **Documentation required:** ADRs for AWS, EKS, RDS.
 **Status:** IMPLEMENTED.
 
+## Phase 1.5: Ansible configuration management
+**Goal:** Codify and manage ongoing mutable configuration of the Jenkins CI EC2 server using Ansible. The `install-ci.sh` user-data script handles the initial one-time boot; Ansible handles everything after that — plugin management, tool upgrades, hardening, and idempotent re-configuration.
+**Dependencies:** Phase 1 (EC2 running and SSH-accessible).
+**Implementation tasks:**
+  - Create `ansible/` directory structure (inventory, roles, playbooks).
+  - Write `system-hardening` role (SSH hardening, ulimits, firewall).
+  - Write `jenkins` role (plugin installation via Ansible, JCasC template).
+  - Write `sonarqube` role (quality gate and project config).
+  - Write `update-tools` playbook for Trivy/Cosign version pinning.
+  - Encrypt sensitive values (Jenkins admin password) with Ansible Vault.
+**Definition of Done:** Playbook runs idempotently (zero changes on second run). Jenkins plugins confirmed installed. SonarQube quality gate confirmed active.
+**Risks:** SSH connectivity to EC2, Ansible Vault password management, idempotency bugs.
+**Cost implications:** None — Ansible runs on your workstation, not a cloud resource.
+**Documentation required:** ADR-013 (Ansible).
+**Status:** PLANNED.
 ## Phase 2: Application containerization
 **Goal:** Create robust Dockerfiles for frontend and backend.
 **Dependencies:** Phase 1.

@@ -16,17 +16,19 @@ The diagram below shows the intended target architecture. The project is current
 ![StockMind DevOps architecture design](src/Images/Stock_mind_Architecture.png)
 
 ## Technology Overview
-- **Application:** React (Frontend), FastAPI (Backend), PostgreSQL, Gemini API
+- **Application:** React (Frontend), FastAPI (Backend), PostgreSQL, Gemini API (AI — Planned)
 - **Infrastructure:** Terraform, AWS (VPC, EKS, RDS, ECR, EC2)
+- **Configuration Management (Planned):** Ansible — manages the Jenkins EC2 CI server configuration (plugins, tool upgrades, hardening) after Terraform provisions it
 - **CI/CD (Planned):** Jenkins, SonarQube, Trivy, Cosign, Argo CD
 - **Observability (Planned):** Prometheus, Grafana, Fluent Bit, Loki, OpenTelemetry, Tempo, Alertmanager
 
 ## Repository Structure
 ```text
 terraform/
-  CI/    # Jenkins EC2 host and ECR foundations
-  CD/    # AWS EKS, RDS, networking, and Argo CD bootstrap
-docs/    # Comprehensive project documentation
+  CI/       # Jenkins EC2 host and ECR foundations
+  CD/       # AWS EKS, RDS, networking, and Argo CD bootstrap
+ansible/    # Configuration management for CI EC2 server (PLANNED)
+docs/       # Comprehensive project documentation
 ```
 
 ## Terraform Quick Start

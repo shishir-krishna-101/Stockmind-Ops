@@ -46,21 +46,22 @@ flowchart TD
 
 1. [Prerequisites](#prerequisites)
 2. [Phase 1 — Terraform CI Foundation](#phase-1--terraform-ci-foundation-implemented)
-3. [Phase 2 — Terraform CD Foundation](#phase-2--terraform-cd-foundation-implemented)
-4. [Phase 3 — Application Containerization](#phase-3--application-containerization)
-5. [Phase 4 — First Manual Deployment to EKS](#phase-4--first-manual-deployment-to-eks)
-6. [Phase 5 — Jenkins CI Pipeline](#phase-5--jenkins-ci-pipeline)
-7. [Phase 6 — Security Scanning and Image Signing](#phase-6--security-scanning-and-image-signing)
-8. [Phase 7 — Argo CD GitOps](#phase-7--argo-cd-gitops)
-9. [Phase 8 — Observability](#phase-8--observability)
-10. [Phase 9 — Autoscaling and Reliability](#phase-9--autoscaling-and-reliability)
-11. [Phase 10 — Security Hardening](#phase-10--security-hardening)
-12. [Phase 11 — AI Incident Engine](#phase-11--ai-incident-engine)
-13. [Phase 12 — Controlled Remediation](#phase-12--controlled-remediation)
-14. [Phase 13 — Cost Optimization](#phase-13--cost-optimization)
-15. [Verification Checklist](#verification-checklist)
-16. [Terraform vs Argo CD Boundary](#what-argo-cd-owns-vs-what-terraform-owns)
-17. [Quick Reference: Current State](#quick-reference-current-state)
+3. [Phase 1.5 — Ansible Configuration Management](#phase-15--ansible-configuration-management)
+4. [Phase 2 — Terraform CD Foundation](#phase-2--terraform-cd-foundation-implemented)
+5. [Phase 3 — Application Containerization](#phase-3--application-containerization)
+6. [Phase 4 — First Manual Deployment to EKS](#phase-4--first-manual-deployment-to-eks)
+7. [Phase 5 — Jenkins CI Pipeline](#phase-5--jenkins-ci-pipeline)
+8. [Phase 6 — Security Scanning and Image Signing](#phase-6--security-scanning-and-image-signing)
+9. [Phase 7 — Argo CD GitOps](#phase-7--argo-cd-gitops)
+10. [Phase 8 — Observability](#phase-8--observability)
+11. [Phase 9 — Autoscaling and Reliability](#phase-9--autoscaling-and-reliability)
+12. [Phase 10 — Security Hardening](#phase-10--security-hardening)
+13. [Phase 11 — AI Incident Engine](#phase-11--ai-incident-engine)
+14. [Phase 12 — Controlled Remediation](#phase-12--controlled-remediation)
+15. [Phase 13 — Cost Optimization](#phase-13--cost-optimization)
+16. [Verification Checklist](#verification-checklist)
+17. [Terraform vs Argo CD vs Ansible Boundary](#what-argo-cd-owns-vs-what-terraform-owns)
+18. [Quick Reference: Current State](#quick-reference-current-state)
 
 ---
 
@@ -74,6 +75,7 @@ Before starting any phase, ensure the following are available on your workstatio
 |---|---|---|
 | AWS CLI v2 | Communicate with AWS | [AWS Install Guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
 | Terraform >= 1.9 | Provision infrastructure | [Terraform Install](https://developer.hashicorp.com/terraform/install) |
+| Ansible >= 2.15 | Configuration management for EC2 | [Ansible Install](https://docs.ansible.com/ansible/latest/installation_guide/index.html) |
 | kubectl | Kubernetes CLI | [kubectl Install](https://kubernetes.io/docs/tasks/tools/) |
 | Helm | Kubernetes package manager | [Helm Install](https://helm.sh/docs/intro/install/) |
 | Docker Desktop / Docker Engine | Build and run containers locally | [Docker Install](https://docs.docker.com/get-docker/) |
@@ -204,6 +206,306 @@ aws ecr describe-repositories --query "repositories[].repositoryName"
 - Open `http://<ec2-public-ip>:9000` — SonarQube login should appear.
 
 > Note: SonarQube takes ~2-3 minutes to fully initialize after instance boot.
+
+---
+
+## Phase 1.5 — Ansible Configuration Management
+
+**Status: PLANNED**
+**Prerequisites:** Phase 1 (Jenkins EC2 running and reachable via SSH).
+
+### Why this phase exists
+
+Terraform provisions the Jenkins EC2 instance and runs `install-ci.sh` once at creation. That script does initial tool installation. However:
+
+- `install-ci.sh` runs **only once** at boot — it cannot be re-applied.
+- If Jenkins plugins need updating, or a tool version needs changing, you would otherwise have to SSH in manually or destroy and recreate the instance.
+- Jenkins plugin configuration, SonarQube quality gate setup, and system-level tuning are **not** infrastructure — they are configuration. Ansible is the correct tool for this layer.
+
+**The ownership boundary:**
+
+```
+Terraform   → provisions the EC2 instance (immutable infrastructure)
+Ansible     → configures what runs on that instance (mutable configuration)
+Argo CD     → manages Kubernetes workloads (separate layer entirely)
+```
+
+### Directory structure
+
+Create an `ansible/` directory in `Stockmind-Ops/`:
+
+```
+ansible/
+├── inventory/
+│    ├── hosts.ini             # Static inventory (or use dynamic AWS inventory)
+│    └── group_vars/
+│         └── ci_servers.yml  # Variables for the CI server group
+├── roles/
+│    ├── jenkins/
+│    │    ├── tasks/main.yml
+│    │    ├── vars/main.yml
+│    │    └── templates/
+│    │         └── jenkins-casc.yml.j2   # Jenkins Configuration as Code
+│    ├── sonarqube/
+│    │    └── tasks/main.yml
+│    └── system-hardening/
+│         └── tasks/main.yml
+├── playbooks/
+│    ├── ci-server.yml        # Main playbook — runs all roles on CI server
+│    └── update-tools.yml     # Targeted playbook for tool version upgrades
+├── ansible.cfg
+└── requirements.yml          # Ansible Galaxy role dependencies
+```
+
+### Step-by-step
+
+**1. Install Ansible on your workstation**
+
+```bash
+# macOS
+brew install ansible
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install ansible -y
+
+# pip (cross-platform)
+pip install ansible
+```
+
+**2. Configure the inventory**
+
+```ini
+# ansible/inventory/hosts.ini
+[ci_servers]
+jenkins-ci ansible_host=<ec2-public-ip> ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/<your-key.pem>
+```
+
+Or use the AWS dynamic inventory plugin to automatically discover instances by tag:
+
+```bash
+pip install boto3 botocore
+# Use aws_ec2 dynamic inventory plugin
+```
+
+**3. Configure group variables**
+
+```yaml
+# ansible/inventory/group_vars/ci_servers.yml
+# Do NOT put secrets here in plain text — use Ansible Vault for sensitive values
+jenkins_http_port: 8080
+sonarqube_port: 9000
+trivy_version: "0.58.0"
+cosign_version: "v2.4.1"
+
+# Sensitive values — encrypt with ansible-vault
+# ansible-vault encrypt_string 'mysecretpassword' --name 'jenkins_admin_password'
+```
+
+**4. Write the main CI server playbook**
+
+```yaml
+# ansible/playbooks/ci-server.yml
+---
+- name: Configure StockMind CI Server
+  hosts: ci_servers
+  become: true       # Run as root where needed
+
+  roles:
+    - role: system-hardening
+    - role: jenkins
+    - role: sonarqube
+```
+
+**5. System hardening role**
+
+```yaml
+# ansible/roles/system-hardening/tasks/main.yml
+---
+- name: Set system open file limits for Jenkins
+  ansible.posix.sysctl:
+    name: fs.file-max
+    value: "100000"
+    state: present
+    sysctl_set: true
+
+- name: Ensure Jenkins user has increased limits
+  community.general.pam_limits:
+    domain: jenkins
+    limit_type: "{{ item.type }}"
+    limit_item: nofile
+    value: "65536"
+  loop:
+    - { type: soft }
+    - { type: hard }
+
+- name: Ensure SSH password authentication is disabled
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: Restart sshd
+
+- name: Ensure only required ports are open in firewalld
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop:
+    - "8080/tcp"   # Jenkins
+    - "9000/tcp"   # SonarQube
+    - "22/tcp"     # SSH
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+```
+
+**6. Jenkins role — manage plugins declaratively**
+
+```yaml
+# ansible/roles/jenkins/tasks/main.yml
+---
+- name: Ensure Jenkins is running
+  ansible.builtin.service:
+    name: jenkins
+    state: started
+    enabled: true
+
+- name: Install required Jenkins plugins
+  community.general.jenkins_plugin:
+    name: "{{ item }}"
+    state: present
+    url: "http://localhost:{{ jenkins_http_port }}"
+    url_username: admin
+    url_password: "{{ jenkins_admin_password }}"    # From Ansible Vault
+  loop:
+    - git
+    - pipeline
+    - docker-workflow
+    - sonar
+    - github
+    - kubernetes
+    - blueocean
+    - credentials-binding
+  notify: Restart Jenkins
+
+  handlers:
+    - name: Restart Jenkins
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted
+```
+
+**7. Encrypt secrets with Ansible Vault**
+
+```bash
+# Create a vault password file (do NOT commit this to Git)
+echo "your-vault-password" > ~/.ansible-vault-pass
+chmod 600 ~/.ansible-vault-pass
+
+# Encrypt the Jenkins admin password
+ansible-vault encrypt_string 'admin-secret-password' \
+  --name 'jenkins_admin_password' \
+  --vault-password-file ~/.ansible-vault-pass
+
+# The output looks like:
+# jenkins_admin_password: !vault |
+#   $ANSIBLE_VAULT;1.1;AES256
+#   61386...
+# Add this to group_vars/ci_servers.yml (safe to commit — it's encrypted)
+```
+
+**8. Run the playbook**
+
+```bash
+cd ansible/
+
+# Dry run first (check mode — no changes applied)
+ansible-playbook playbooks/ci-server.yml \
+  --inventory inventory/hosts.ini \
+  --vault-password-file ~/.ansible-vault-pass \
+  --check
+
+# Apply for real
+ansible-playbook playbooks/ci-server.yml \
+  --inventory inventory/hosts.ini \
+  --vault-password-file ~/.ansible-vault-pass
+```
+
+**9. Upgrade tools (without rebuilding the instance)**
+
+```bash
+# ansible/playbooks/update-tools.yml
+ansible-playbook playbooks/update-tools.yml \
+  --inventory inventory/hosts.ini \
+  --tags trivy    # Run only the Trivy upgrade task
+```
+
+### ansible.cfg
+
+```ini
+# ansible/ansible.cfg
+[defaults]
+inventory = inventory/hosts.ini
+remote_user = ec2-user
+private_key_file = ~/.ssh/<your-key.pem>
+host_key_checking = False
+retry_files_enabled = False
+
+[privilege_escalation]
+become = True
+become_method = sudo
+become_user = root
+```
+
+### requirements.yml (Ansible Galaxy dependencies)
+
+```yaml
+# ansible/requirements.yml
+collections:
+  - name: community.general
+    version: ">=8.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"
+```
+
+Install them before running playbooks:
+
+```bash
+ansible-galaxy collection install -r ansible/requirements.yml
+```
+
+### What Ansible manages vs what it does NOT manage
+
+| Ansible DOES manage | Ansible does NOT manage |
+|---|---|
+| Jenkins plugin installation and version pinning | AWS VPC, EC2, IAM (Terraform) |
+| Jenkins Configuration as Code (JCasC) | Kubernetes workloads (Argo CD) |
+| SonarQube quality gate and project setup | Container image building (Dockerfile/Jenkins) |
+| System tuning (JVM heap, ulimits, sysctl) | EKS cluster resources |
+| SSH hardening and firewall rules | RDS or other managed AWS services |
+| Trivy / Cosign version upgrades | Application deployment logic |
+
+### Evidence of completion
+
+```bash
+# Verify playbook runs idempotently (no changes on second run)
+ansible-playbook playbooks/ci-server.yml \
+  --inventory inventory/hosts.ini \
+  --vault-password-file ~/.ansible-vault-pass \
+  --check
+
+# Expected output:
+# ok=X  changed=0  unreachable=0  failed=0
+
+# Verify Jenkins is up with plugins installed
+curl -s -u admin:<password> http://<ec2-ip>:8080/api/json | jq '.jobs'
+
+# Verify SonarQube quality gate exists
+curl -s -u admin:<password> http://<ec2-ip>:9000/api/qualitygates/list
+```
 
 ---
 
@@ -1250,12 +1552,12 @@ Use this to confirm each phase is truly done — not just partially started.
 
 ---
 
-## What Argo CD Owns vs What Terraform Owns
+## What Argo CD Owns vs What Terraform Owns vs What Ansible Manages
 
-This boundary is strictly maintained — do not mix them.
+These three boundaries are strictly maintained — do not mix them.
 
 ```
-Terraform owns (AWS layer):
+Terraform owns (AWS layer — immutable infrastructure):
   VPC, subnets, NAT Gateway, Internet Gateway
   EKS cluster and managed node groups
   RDS PostgreSQL instance
@@ -1264,6 +1566,15 @@ Terraform owns (AWS layer):
   AWS Secrets Manager secrets
   Argo CD bootstrap (the Helm release that installs Argo CD itself)
   AWS Load Balancer Controller bootstrap
+  EC2 instance creation (the physical server)
+
+Ansible manages (EC2 configuration layer — mutable configuration):
+  Jenkins plugin installation and upgrades
+  Jenkins Configuration as Code (JCasC) setup
+  SonarQube quality gate and project configuration
+  System-level tuning (JVM heap, ulimits, sysctl)
+  SSH hardening and firewall rules on the CI server
+  Trivy / Cosign version pinning and upgrades
 
 Argo CD owns (Kubernetes layer — after Terraform bootstrap):
   External Secrets Operator
@@ -1296,7 +1607,11 @@ Argo CD owns (Kubernetes layer — after Terraform bootstrap):
 | Jenkins EC2 | `terraform/CI/ec2.tf` | IMPLEMENTED |
 | ECR Repositories | `terraform/CI/ecr.tf` | IMPLEMENTED |
 | CI IAM Role | `terraform/CI/iam.tf` | IMPLEMENTED |
-| Jenkins + tools | `terraform/CI/install-ci.sh` | IMPLEMENTED |
+| Jenkins + tools (initial boot) | `terraform/CI/install-ci.sh` | IMPLEMENTED |
+| Ansible CI server configuration | `ansible/playbooks/ci-server.yml` | PLANNED |
+| Ansible Jenkins plugin management | `ansible/roles/jenkins/` | PLANNED |
+| Ansible SonarQube setup | `ansible/roles/sonarqube/` | PLANNED |
+| Ansible system hardening | `ansible/roles/system-hardening/` | PLANNED |
 | Dockerfiles | Application repo | To be created |
 | Jenkins Pipeline | Application repo (Jenkinsfile) | PLANNED |
 | Trivy integration | Jenkins pipeline | PLANNED |
@@ -1311,3 +1626,4 @@ Argo CD owns (Kubernetes layer — after Terraform bootstrap):
 | AI Incident Engine | Future service | FUTURE |
 | Controlled Remediation | Future service | FUTURE |
 | Gemini AI in application | Application repo | FUTURE |
+
